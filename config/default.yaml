@@ -1,0 +1,155 @@
+# =====================================================================
+#  GNSS Aldatma Koşullarında LiDAR-Ataletsel Füzyon - Benzetim Ayarları
+#  (TÜBİTAK 1002-A proje önerisindeki deney tasarımının benzetim karşılığı)
+# =====================================================================
+
+seed: 42                      # tüm sözde-rastgele süreçlerin kök tohumu
+
+# --------------------------------------------------------------- ortamlar
+environment:
+  size: 220.0                 # ortam kenar uzunluğu [m]
+  types: [open_field, campus, flat_poor]
+
+# --------------------------------------------------------------- uçuş / yörünge
+flight:
+  altitude: 6.0               # uçuş irtifası [m] (LiDAR menzili 30 m içinde kalacak)
+  trajectories: [line, rectangle, figure8]
+  speeds: [3.0, 6.0]          # yörünge hızları [m/s]
+  repetitions: 5              # her koşul en az 5 tekrar
+  attack_onset: [40.0, 55.0]  # aldatma başlangıcı aralığı [s] (rastgele seçilir)
+  gnss_denied_duration: 60.0  # GNSS'siz (aldatma/kesinti) süre [s]
+  recovery_duration: 25.0     # aldatma bittikten sonra uçuş devam süresi [s]
+  path_jitter: 0.3            # yörüngeye eklenen yumuşak rastgele sapma genliği [m]
+
+# --------------------------------------------------------------- algılayıcılar
+imu:                          # MEMS sınıfı IMU (Unitree L2 dahili IMU benzeri)
+  rate: 200.0
+  gyro_noise: 0.0025          # [rad/s/sqrt(Hz)]
+  accel_noise: 0.02           # [m/s^2/sqrt(Hz)]
+  gyro_bias_rw: 2.0e-5        # [rad/s^2/sqrt(Hz)]
+  accel_bias_rw: 3.0e-4       # [m/s^3/sqrt(Hz)]
+  gyro_bias_init: 0.003       # başlangıç yanlılığı std [rad/s]
+  accel_bias_init: 0.04       # başlangıç yanlılığı std [m/s^2]
+
+gnss:
+  rate: 5.0
+  sigma_h: 0.6                # beyaz yatay gürültü std [m]
+  sigma_v: 1.0                # beyaz düşey gürültü std [m]
+  gm_sigma: 0.3               # Gauss-Markov ilintili hata std [m]
+  gm_tau: 60.0                # Gauss-Markov zaman sabiti [s]
+  vel_sigma: 0.08             # hız ölçüm gürültüsü std [m/s]
+  ref_lat: 39.9370            # yerel ENU başlangıcı (Gazi Üniversitesi, Ankara)
+  ref_lon: 32.8230
+  ref_alt: 900.0
+
+lidar:                        # Unitree 4D LiDAR L2 benzeri
+  rate: 10.0
+  points_per_scan: 6400       # 64.000 nokta/s @ 10 Hz
+  max_range: 30.0
+  min_range: 0.3
+  elev_min_deg: -90.0         # aşağı bakacak şekilde monte edilmiş, 96° düşey FOV
+  elev_max_deg: 6.0
+  range_noise: 0.02           # [m]
+
+rtk:
+  sigma: 0.015                # referans (ground truth) RTK gürültüsü [m]
+
+# --------------------------------------------------------------- LIO (IEKF, FAST-LIO2 / Point-LIO esinli)
+lio:
+  scan_voxel: 0.5             # tarama seyreltme vokseli [m]
+  map_voxel: 0.4              # harita vokseli [m]
+  map_radius: 45.0            # yerel harita yarıçapı [m]
+  kdtree_rebuild_every: 5     # kd-ağacını kaç taramada bir yenile
+  max_points: 1500            # güncellemede kullanılacak en çok nokta
+  knn: 5
+  plane_thresh: 0.1           # düzlem uyum eşiği [m]
+  meas_sigma: 0.05            # nokta-düzlem ölçüm std [m]
+  max_iter: 4
+  rel_info_scale: 0.5         # göreli poz bilgisinin muhafazakâr ölçeklenmesi (ilintili hatalar için)
+  rel_pos_floor: 0.003        # göreli konum kovaryans tabanı [m]
+  rel_rot_floor_deg: 0.05     # göreli yönelim kovaryans tabanı [deg]
+  rel_pos_prior: 1.0          # dejenere yönler için göreli konum belirsizliği [m]
+  deg_pos_thresh: 500.0       # konum bilgisi özdeğeri dejenerelik eşiği
+  deg_window: 20              # dejenerelik bayrağı için kayan medyan uzunluğu (tarama)
+  deg_horiz_thresh: 1500.0    # kayan medyan en küçük konum bilgisi bu değerin altındaysa yatay/yaw dejenere
+  deg_rot_thresh: 1.0e+5      # yönelim bilgisi özdeğeri dejenerelik eşiği
+  deg_yaw_thresh: 1.0e+5      # kayan medyan en küçük yönelim bilgisi bunun altındaysa yatay/yaw dejenere
+  rel_rot_prior_deg: 1.0
+
+# --------------------------------------------------------------- aldatma senaryoları
+attacks:
+  # "ani sıçrama, sabit kayma, yavaş sürükleme, gürültü artışı, tam sinyal kaybı"
+  jump:       {magnitude: 15.0}            # [m] ani öteleme
+  ramp:       {rate: 0.8}                  # [m/s] sabit hızlı kayma (hız da tutarlı aldatılır)
+  slow_drift: {rate: 0.12}                 # [m/s] yavaş sürükleme (konum-izleyen aldatıcı)
+  noise:      {factor: 8.0}                # gürültü std çarpanı (karıştırma benzeri)
+  dropout:    {}                           # tam sinyal kaybı
+  severity_scales: [0.5, 1.0, 2.0]         # şiddet taraması için çarpanlar (ROC/şiddet analizi)
+
+# --------------------------------------------------------------- füzyon / tespit / geçiş
+fusion:
+  use_gnss_velocity: true
+  gnss_r_scale: 1.0           # filtrede kullanılan GNSS kovaryans ölçeği
+  lio_gate_alpha: 0.001       # LIO göreli poz ölçümleri için aykırı değer kapısı (χ²(6))
+  lio_health_window: 10       # LIO sağlık testi penceresi (tarama)
+  lio_health_alpha: 0.001     # LIO sağlık testi yanlış alarm olasılığı
+  lio_health_vel_tol: 0.15    # sağlık testinde hız toleransı [m/s] (GNSS kaynaklı küçük hız yanlılığına karşı)
+  lio_unhealthy_hold: 10.0    # sağlıksız ilan edilen LIO'nun IMU-öncelikli modda tutulma süresi [s]
+  gnss_aid_lam: 10.0          # GNSS şişirmesi λ bunun altındaysa GNSS 'fiilen kullanılıyor' sayılır
+  gnss_aid_window: 2.0        # GNSS son bu kadar saniyede kullanıldıysa 'GNSS var' sayılır [s]
+  lio_unhealthy_hold_nognss: 2.0  # GNSS yokken sağlıksız LIO'nun en uzun dışlanma süresi [s]: yalnız-IMU seyri kısa tutulur (.inf: eski davranış)
+
+detector:                     # parametreler 'python -m gnss_lio_sim tune' ile geliştirme kümesinde seçildi
+  window: 10                  # pencereli ki-kare testi pencere uzunluğu (ölçüm sayısı)
+  chi2_alpha: 0.001           # pencereli testin yanlış alarm olasılığı
+  cusum_k: 1.5                # CUSUM referans kayması (NIS/dof birimi)
+  cusum_h: 25.0               # CUSUM karar eşiği
+  vel_window: 10
+  vel_alpha: 0.001
+  disp_window: 20.0           # LIO-GNSS yer değiştirme testi pencere uzunluğu [s]
+  disp_avg: 2.0               # pencere uçlarında ortalama alma süresi [s]
+  disp_alpha: 0.001           # yer değiştirme testinin çağ başına yanlış alarm olasılığı
+  disp_deg_sigma: 0.03        # dejenere taramanın yer değiştirmeye katkı belirsizliği [m]
+  disp_max_deg_frac: 0.5      # penceredeki dejenere tarama oranı bunu aşarsa test kullanılamaz
+  dropout_timeout: 1.0        # [s]
+  readmit_time: 5.0           # sert yöntemlerde GNSS'i yeniden kabul için tutarlı geçmesi gereken süre [s]
+  confirm_epochs: 5           # alarm kararı için ardışık eşik aşımı sayısı (tek çağlık sıçramalara karşı)
+  watchdog_time: 15.0         # LIO doğrulaması yokken GNSS'in en uzun dışlanma süresi [s]
+
+transition:
+  # önerilen yöntem: tespit istatistiğiyle sürülen sürekli kovaryans şişirme
+  soft_onset_chi2: 0.85       # χ² testlerinde şişirmenin başladığı oran (nominal ≈ 0.5)
+  soft_onset_cusum: 0.2       # CUSUM'da şişirmenin başladığı oran (nominal ≈ 0)
+  soft_onset_disp: 0.5        # yer değiştirme testinde şişirmenin başladığı oran (nominal ≈ 0.2)
+  soft_gain: 4.0              # alarm eşiğine ulaşıldığında log-şişirme (λ = e^4 ≈ 55)
+  soft_max_inflation: 1.0e+6  # en büyük şişirme (≈ dışlama)
+  soft_decay: 0.9             # şişirmenin geri dönüş yumuşatması (her GNSS çağında log-çarpan)
+
+# --------------------------------------------------------------- literatür karşılaştırmaları (baselines.py)
+baselines:                    # parametreler 'python -m gnss_lio_sim baselines tune' ile geliştirme kümesinde seçilir
+  ci:                         # Tanil ve ark. 2018 (IEEE TAES): GNSS/INS birikimli yenilik (CI) izleyicisi
+    window: 10                # pencere (GNSS çağı)
+    alpha: 0.001              # yanlış alarm olasılığı
+  gu:                         # Gu, Xing, You 2021 (Sensors): GNSS − odometri konum farkı testi
+    window: 10                # pencere (örnek; makalede son 10 grup)
+    period: 2.0               # örnekleme/tespit aralığı [s] (makalede 2 s)
+    pf: 0.001                 # χ² eşiğinin yanlış alarm olasılığı
+    beta: 120.0               # Gauss-dışılık çarpanı β (makalede sayı verilmemiş): geliştirme kümesinde YA ≤ %1
+                              # sağlayan en küçük değer; karşılaştırmada ayrıca β = 8 ve 30 raporlanır
+    init_time: 20.0           # odometriyi ENU'ya ötelemek için ilk GNSS süresi [s] (saldırıdan önce biter)
+  alja:                       # Aljaafreh ve ark. 2026 (Drones): NIS + süreklilik + CUSUM, karantina
+    alpha: 0.01               # NIS kapısının yanlış alarm olasılığı (γ = χ²(m, 1−α))
+    n_g: 3                    # süreklilik sayacı alarm eşiği
+    kappa: 0.85               # CUSUM payı κ = 0,85γ (makaledeki değer)
+    h: 25.0                   # CUSUM karar eşiği. Makaledeki 6,5 geliştirme kümesinde YA %1,44 (> %1); YA ≤ %1
+                              # sağlayan tüm adaylar yavaş sürüklemede eşit (%0) olduğundan makaleye en yakın
+                              # aday seçildi (yalnız h değişir). Makale değerleri ayrıca 'alja_lio_paper' olarak raporlanır
+    n_r: 10                   # yeniden kabul için ardışık tutarlı çağ sayısı
+    c_max: 10                 # süreklilik sayacının üst sınırı (makalede sayı verilmemiş)
+
+# --------------------------------------------------------------- değerlendirme
+evaluation:
+  transition_window: 8.0      # geçiş sıçraması değerlendirme penceresi [s]
+  drift_segment: 10.0         # sürüklenme-geometri regresyonu için bölüt uzunluğu [s]
+  rpe_delta: 1.0              # RPE için mesafe/zaman adımı [s]
+  cv_folds: 5

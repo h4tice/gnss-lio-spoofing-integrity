@@ -1,0 +1,19 @@
+# virtual environment and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# experiment outputs and data (large; regenerate with the commands in README.md)
+results/
+paper/figures/
+*.npz
+*.bag
+*.pos
+*.pcd
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

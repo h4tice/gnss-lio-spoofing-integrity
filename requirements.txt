@@ -1,0 +1,12 @@
+# Python 3.11 ile test edilmiştir (open3d için 3.8–3.12 gerekir)
+numpy>=2.0
+scipy>=1.13
+open3d>=0.19
+matplotlib>=3.9
+pandas>=2.2
+pyyaml>=6.0
+statsmodels>=0.14
+scikit-learn>=1.5
+tqdm>=4.66
+rosbags>=0.10      # ROS kurulumu olmadan ROS 2 bag yazımı
+evo>=1.28          # yörünge değerlendirme aracı (isteğe bağlı çapraz kontrol)

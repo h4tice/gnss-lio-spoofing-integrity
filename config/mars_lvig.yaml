@@ -1,0 +1,91 @@
+# =====================================================================
+#  Gerçek veri (MARS-LVIG, DJI M300 + Livox Avia + ZED-F9P) için ayarlar
+#  default.yaml'ın üzerine yazılır: python -m gnss_lio_sim real-lio ...
+# =====================================================================
+
+real:
+  bag_dir: C:/Users/user/datasets/MARS-LVIG          # bag dosyaları (OneDrive dışında)
+  cache_dir: C:/Users/user/datasets/MARS-LVIG/cache  # çıkarılmış akışlar (npz)
+  extract_voxel: 1.0          # çıkarma sırasında tarama seyreltme [m]
+  extract_max_points: 6000
+  min_range: 2.0              # [m]
+  start_altitude: 30.0        # LIO bu irtifanın (kalkış noktasına göre) üstündeki ilk havada asılı kalma anında başlar [m]
+  init_window: 1.0            # başlangıç yönelimi için ivme ortalama süresi [s]
+  align_duration: 60.0        # LIO çerçevesini ENU'ya hizalamak için hareketin ilk kaç saniyesi kullanılır [s]
+  lidar_to_imu_t: [0.04165, 0.02326, -0.0284]   # Livox Avia LiDAR → dahili IMU ötelemesi (FAST-LIO avia.yaml)
+  n_onsets: 6                 # her dizi için farklı saldırı başlangıcı/yönü sayısı (tekrar)
+  attack_span: 25.0           # saldırı bitiminden sonra gereken toparlanma süresi [s]
+  max_rtk_dup: 0.02           # referans kalite ölçütü: RTK mesajlarının bu oranından fazlası tekrar ise dizi dışlanır
+  gnss_donor: HKairport_GNSS01  # deney GNSS'i (u-blox) kaydedilmemiş dizilerde kullanılan ölçülmüş hata dizisinin kaynağı
+  spin_rate: 1.5             # görev sonu: hizalamadan sonra bu açısal hızı aşan ilk yerinde dönüş [rad/s]
+  env_label:                  # ortam etiketleri (rapor)
+    HKairport_GNSS01: airfield
+    HKairport_GNSS02: airfield
+    HKairport_GNSS03: airfield
+    HKisland_GNSS01: island
+    HKisland_GNSS02: island
+    HKisland_GNSS03: island
+    AMtown01: town
+    AMtown02: town
+    AMtown03: town
+    AMvalley01: valley
+    AMvalley02: valley
+    AMvalley03: valley
+    Featureless_GNSS01: featureless
+    Featureless_GNSS02: featureless
+    Featureless_GNSS03: featureless
+
+gnss:                         # ZED-F9P RTK'sız çözüm: HKairport_GNSS03 verisinden kalibre edildi
+  rate: 5.0                   # 10 Hz çözüm 5 Hz'e seyreltilir (benzetimle aynı tespit ayarları)
+  sigma_h: 0.1                # alıcı çözümü içten süzülmüş: beyaz bileşen ~2 cm (taban olarak 0,1)
+  sigma_v: 0.1
+  gm_sigma: 0.76              # yatay ilintili hata std [m]
+  gm_tau: 56.0                # yatay zaman sabiti [s]
+  gm_sigma_v: 3.3             # düşey ilintili hata std [m] (rastgele yürüyüşe yakın)
+  gm_tau_v: 380.0             # düşey zaman sabiti [s]
+  # Ölçüm (geliştirme uçuşu HKairport_GNSS03): W saniyelik yatay hata değişiminin std'si 5/10/20/40 s
+  # için 0,32/0,52/0,75/1,02 m; GM modeli 10–40 s'de %30–40 düşük kestirir. Bu tabloyla çok pencereli
+  # D testi ve α ∈ {0,001; 0,003; 0,01} denendi: yanlış alarmsız hiçbir aday yavaş sürükleme tespitini
+  # iyileştirmedi, bu yüzden kullanılmıyor (etkinleştirmek için: disp_std_table: [[W, std], ...]).
+  vel_sigma: 0.08             # yatay hız hatası std [m/s]
+  vel_sigma_v: 0.16           # düşey hız hatası std [m/s]
+
+flight:
+  gnss_denied_duration: 60.0
+
+detector:
+  # u-blox düşey hatası saldırısız da ~10 m dolaşıyor (RTK ve aşağı bakan LiDAR ile doğrulandı);
+  # saldırılar yatay olduğundan bütünlük testleri yatay düzlemde yürütülür (düşey ayrı izlenir)
+  horizontal_only: true
+
+evaluation:
+  horizontal: true            # hata ölçütleri yatay düzlemde (düşey GNSS hatası saldırıdan bağımsız)
+
+attacks:
+  # alıcı çözümünün beyaz gürültüsü çok küçük olduğundan gürültü saldırısı benzetimle aynı
+  # mutlak düzeyde tanımlanır (0,6 / 1,0 m × 8)
+  noise: {factor: 8.0, sigma_h: 0.6, sigma_v: 1.0}
+
+imu:                          # Livox Avia dahili BMI088 (titreşim payıyla)
+  rate: 200.0
+  gyro_noise: 0.005
+  accel_noise: 0.08
+  gyro_bias_rw: 1.0e-4
+  accel_bias_rw: 2.0e-3
+
+lio:                          # 80-130 m irtifada aşağı bakan dar görüşlü LiDAR
+  scan_voxel: 1.5
+  map_voxel: 1.0
+  map_radius: 160.0
+  kdtree_rebuild_every: 5
+  max_points: 1500
+  knn: 5
+  plane_thresh: 0.25
+  match_dist: 3.0
+  meas_sigma: 0.15
+  max_iter: 4
+  rel_info_scale: 0.15        # göreli poz kovaryansı: 1-2 s artımlarda ortalama NEES ≈ 3 olacak şekilde (RTK'ya karşı)
+
+baselines:
+  gu:
+    init_time: 0.0            # LIO zaten ilk 60 s'deki u-blox konumlarıyla ENU'ya hizalı (real/pipeline.py)

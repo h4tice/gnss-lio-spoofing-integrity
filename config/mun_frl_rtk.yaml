@@ -1,0 +1,90 @@
+# =====================================================================
+#  İkinci gerçek veri seti: MUN-FRL (Thalagala ve ark., IJRR 2024; CC BY 4.0)
+#  DJI M600 + Velodyne VLP-16 (aşağı bakan) + Xsens MTi-30 + simpleRTK2B
+#  default.yaml'ın üzerine yazılır. Tespit eşikleri benzetimden aynen alınır (MARS-LVIG ile aynı ilke);
+#  yalnız fiziksel modeller (GNSS hata modeli, IMU gürültüsü, LIO göreli kovaryans ölçeği) ayarlanır.
+#  BU DOSYA: RTK-sabit GNSS rejimi (deney GNSS'i /fix). Tek nokta rejimi: config/mun_frl.yaml
+# =====================================================================
+
+real:
+  dataset: mun_frl
+  title: "MUN-FRL (DJI M600 + Velodyne VLP-16 + Xsens MTi-30 + simpleRTK2B)"
+  gnss_desc: "Deney GNSS'i: uçuşta yayımlanan **RTK-sabit** çözüm (/fix), 5 Hz; hız konumun farkından. Referans: bağımsız baz istasyonlu PPK çözümü (sabit)."
+  bag_dir: C:/Users/user/datasets/MUN-FRL
+  cache_dir: C:/Users/user/datasets/MUN-FRL/cache
+  files:                      # dizi adı → veri sayfasındaki dosyalar
+    quarry1: {bag: flight_dataset2.bag, ppk: quarry_1_ppk.pos, single: quarry_1.pos}
+    quarry2: {bag: flight_dataset3.bag, ppk: quarry_2_ppk.pos, single: quarry_2.pos}
+    lighthouse: {bag: flight_dataset5_fixed.bag, ppk: flight_dataset5_ppk.pos, single: flight_dataset5.pos}
+  gnss_key: pvt_rtk           # deney GNSS'i: uçuşta yayımlanan RTK-sabit çözüm (/fix)
+  extract_voxel: 0.5
+  extract_max_points: 6000
+  min_range: 2.0
+  start_altitude: 10.0        # 25-55 m irtifalı uçuşlar
+  gnss_resample: interp      # GNSS çağları ortak ızgaraya denk gelmez (bkz. build_flights)
+  stop_at_landing: true       # dizilerde inişten sonra uzun yer bekleme dönemi var
+  init_window: 1.0
+  align_duration: 60.0
+  lidar_to_imu_t: [0.0, 0.0, 0.0]   # noktalar çıkarmada IMU çerçevesine dönüştürülür
+  # velodyne → imu_up dış parametreleri: tam uçuş bag'lerinde /tf_static yoktur. Veri setinin M600
+  # kalibrasyonundan (belgeler, Calibration: body_T_camDown ve camDown_T_lidar, "For DJI M600") hesaplandı:
+  # R_UP · T_BC · T_CL. (Örnek bag'in /tf_static'i Bell 412 kalibrasyonudur; M600 uçuşlarında kullanılmaz.)
+  lidar_to_imu_R: [[-0.001787, -0.001108, -0.999998], [0.00191, -0.999998, 0.001105], [-0.999997, -0.001908, 0.001789]]
+  lidar_to_imu_p: [-0.1249, 0.0471, -0.059]
+  n_onsets: 6
+  attack_span: 25.0
+  max_rtk_dup: 0.02
+  gnss_donor: none
+  spin_rate: 1.5
+  env_label:
+    quarry1: quarry
+    quarry2: quarry
+    lighthouse: coast
+
+gnss:                         # RTK-sabit /fix, quarry1'de PPK'ya göre (datum sonrası): std E/N/U 0,07/0,02/0,04 m,
+  rate: 5.0                   # beyaz bileşen 0,02/0,01/0,03 m, 40 s'lik yatay değişim std 0,08 m
+  sigma_h: 0.03
+  sigma_v: 0.05
+  gm_sigma: 0.06
+  gm_tau: 60.0
+  gm_sigma_v: 0.05
+  gm_tau_v: 120.0
+  vel_sigma: 0.06             # hız konumun farkından türetilir (0,4 s taban); ölçülen std 0,06/0,02/0,10 m/s
+  vel_sigma_v: 0.1
+
+flight:
+  gnss_denied_duration: 60.0
+
+detector:
+  horizontal_only: true
+
+evaluation:
+  horizontal: true
+
+attacks:
+  noise: {factor: 8.0, sigma_h: 0.6, sigma_v: 1.0}
+
+imu:                          # Xsens MTi-30 (veri sayfası değerlerinin titreşim payıyla ~5 katı)
+  rate: 400.0
+  gyro_noise: 0.003
+  accel_noise: 0.02
+  gyro_bias_rw: 2.0e-5
+  accel_bias_rw: 3.0e-4
+
+lio:                          # 25-55 m irtifada aşağı bakan 16 kanallı dönen LiDAR
+  scan_voxel: 1.0
+  map_voxel: 0.5
+  map_radius: 100.0
+  kdtree_rebuild_every: 5
+  max_points: 1500
+  knn: 5
+  plane_thresh: 0.2
+  match_dist: 2.0
+  meas_sigma: 0.1
+  max_iter: 4
+  plane_min_ratio: 0.1         # doğrusal (tek halka) komşulukları at; quarry1: 0,02-0,1 eşdeğer, en küçük ATE 0,1 (0: lighthouse ıraksar)
+  rel_info_scale: 0.07        # quarry1 (geliştirme uçuşu): 1 s / 2 s artımlarda ort. NEES ≈ 3 (MARS ile aynı ölçüt)
+
+baselines:
+  gu:
+    init_time: 0.0
